@@ -18,6 +18,8 @@ import torch
 import PIL.Image
 import dnnlib
 from torch_utils import distributed as dist
+from matplotlib import pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 #----------------------------------------------------------------------------
 # Proposed EDM sampler (Algorithm 2).
@@ -27,6 +29,16 @@ def edm_sampler(
     num_steps=18, sigma_min=0.002, sigma_max=80, rho=7,
     S_churn=0, S_min=0, S_max=float('inf'), S_noise=1,
 ):
+    print("EDM sampler args")
+    print(f"num_steps: {num_steps}")
+    print(f"sigma_min: {sigma_min}")
+    print(f"sigma_max: {sigma_max}")
+    print(f"rho: {rho}")
+    print(f"S_churn: {S_churn}")
+    print(f"S_min: {S_min}")
+    print(f"S_max: {S_max}")
+    print(f"S_noise: {S_noise}")
+
     # Adjust noise levels based on what's supported by the network.
     sigma_min = max(sigma_min, net.sigma_min)
     sigma_max = min(sigma_max, net.sigma_max)
@@ -35,6 +47,16 @@ def edm_sampler(
     step_indices = torch.arange(num_steps, dtype=torch.float64, device=latents.device)
     t_steps = (sigma_max ** (1 / rho) + step_indices / (num_steps - 1) * (sigma_min ** (1 / rho) - sigma_max ** (1 / rho))) ** rho
     t_steps = torch.cat([net.round_sigma(t_steps), torch.zeros_like(t_steps[:1])]) # t_N = 0
+
+    indices = torch.cat([step_indices, torch.zeros_like(step_indices[:1])+num_steps])
+
+    os.makedirs("vis", exist_ok=True)
+    plt.plot(indices.cpu().numpy(), t_steps.cpu().numpy(), 'o-')
+    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+    plt.tight_layout()
+    out_name = f"vis/t_steps_steps{num_steps}_sigmin{sigma_min}_sigmax{sigma_max}_rho{rho}.png"
+    plt.savefig(out_name, dpi=300)
+    plt.close()
 
     # Main sampling loop.
     x_next = latents.to(torch.float64) * t_steps[0]
@@ -240,16 +262,17 @@ def main(network_pkl, outdir, subdirs, seeds, class_idx, max_batch_size, device=
     "Elucidating the Design Space of Diffusion-Based Generative Models".
 
     Examples:
-
-    \b
+    ```shell
     # Generate 64 images and save them as out/*.png
     python generate.py --outdir=out --seeds=0-63 --batch=64 \\
         --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl
-
+    ```
     \b
+    ```shell
     # Generate 1024 images using 2 GPUs
     torchrun --standalone --nproc_per_node=2 generate.py --outdir=out --seeds=0-999 --batch=64 \\
         --network=https://nvlabs-fi-cdn.nvidia.com/edm/pretrained/edm-cifar10-32x32-cond-vp.pkl
+    ```
     """
     dist.init()
     num_batches = ((len(seeds) - 1) // (max_batch_size * dist.get_world_size()) + 1) * dist.get_world_size()

@@ -83,10 +83,11 @@ def main(**kwargs):
 
     Examples:
 
-    \b
+    ```shell
     # Train DDPM++ model for class-conditional CIFAR-10 using 8 GPUs
     torchrun --standalone --nproc_per_node=8 train.py --outdir=training-runs \\
         --data=datasets/cifar10-32x32.zip --cond=1 --arch=ddpmpp
+    ```
     """
     opts = dnnlib.EasyDict(kwargs)
     torch.multiprocessing.set_start_method('spawn')
